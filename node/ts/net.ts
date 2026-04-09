@@ -104,6 +104,18 @@ export type NetConstructorOptions = Readonly<
       buildVariant?: BuildVariant;
     }
   | {
+      customHostOverride: true;
+      env: Environment;
+      userAgent: string;
+      remoteConfig?: Map<string, string>;
+      buildVariant?: BuildVariant;
+      chatHostname: string;
+      chatPort: number;
+      cdsiHostname?: string;
+      cdsiPort?: number;
+      rootCertificateDer: Uint8Array<ArrayBuffer>;
+    }
+  | {
       localTestServer: true;
       userAgent: string;
       TESTING_localServer_chatPort: number;
@@ -157,7 +169,32 @@ export class Net {
   constructor(private readonly options: NetConstructorOptions) {
     this.asyncContext = new TokioAsyncContext(Native.TokioAsyncContext_new());
 
-    if (options.localTestServer) {
+    if ('customHostOverride' in options && options.customHostOverride) {
+      const {
+        env,
+        userAgent,
+        remoteConfig = new Map<string, string>(),
+        buildVariant = BuildVariant.Production,
+        chatHostname,
+        chatPort,
+        cdsiHostname = '',
+        cdsiPort = 0,
+        rootCertificateDer,
+      } = options;
+      this._connectionManager = newNativeHandle(
+        Native.ConnectionManager_newCustomOverride(
+          env,
+          userAgent,
+          new BridgedStringMap(remoteConfig),
+          buildVariant,
+          chatHostname,
+          chatPort,
+          cdsiHostname,
+          cdsiPort,
+          rootCertificateDer
+        )
+      );
+    } else if (options.localTestServer) {
       this._connectionManager = newNativeHandle(
         Native.TESTING_ConnectionManager_newLocalOverride(
           options.userAgent,

@@ -554,6 +554,7 @@ type NativeFunctions = {
   TokioAsyncContext_cancel: (context: Wrapper<TokioAsyncContext>, rawCancellationId: bigint) => void;
   ConnectionProxyConfig_new: (scheme: string, host: string, port: number, username: string | null, password: string | null) => ConnectionProxyConfig;
   ConnectionManager_new: (environment: number, userAgent: string, remoteConfig: Wrapper<BridgedStringMap>, buildVariant: number) => ConnectionManager;
+  ConnectionManager_newCustomOverride: (environment: number, userAgent: string, remoteConfig: Wrapper<BridgedStringMap>, buildVariant: number, chatHostname: string, chatPort: number, cdsiHostname: string, cdsiPort: number, rootCertificateDer: Uint8Array<ArrayBuffer>) => ConnectionManager;
   ConnectionManager_set_proxy: (connectionManager: Wrapper<ConnectionManager>, proxy: Wrapper<ConnectionProxyConfig>) => void;
   ConnectionManager_set_invalid_proxy: (connectionManager: Wrapper<ConnectionManager>) => void;
   ConnectionManager_clear_proxy: (connectionManager: Wrapper<ConnectionManager>) => void;
@@ -1112,6 +1113,7 @@ const { registerErrors,
   TokioAsyncContext_cancel,
   ConnectionProxyConfig_new,
   ConnectionManager_new,
+  ConnectionManager_newCustomOverride,
   ConnectionManager_set_proxy,
   ConnectionManager_set_invalid_proxy,
   ConnectionManager_clear_proxy,
@@ -1672,6 +1674,7 @@ export { registerErrors,
   TokioAsyncContext_cancel,
   ConnectionProxyConfig_new,
   ConnectionManager_new,
+  ConnectionManager_newCustomOverride,
   ConnectionManager_set_proxy,
   ConnectionManager_set_invalid_proxy,
   ConnectionManager_clear_proxy,

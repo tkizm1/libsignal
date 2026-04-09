@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::borrow::Cow;
 use std::num::NonZeroU16;
 
 use libsignal_bridge_macros::bridge_fn;
@@ -12,8 +13,10 @@ pub use libsignal_bridge_types::net::{
 };
 use libsignal_net::chat::ConnectionInfo;
 use libsignal_net::connect_state::infer_proxy_mode_for_config;
+use libsignal_net::env::DomainConfig;
+use libsignal_net::infra::certs::RootCertificates;
 use libsignal_net::infra::errors::LogSafeDisplay;
-use libsignal_net::infra::route::ConnectionProxyConfig;
+use libsignal_net::infra::route::{ConnectionProxyConfig, HttpVersion};
 
 use crate::support::*;
 use crate::*;
@@ -92,6 +95,35 @@ fn ConnectionProxyConfig_new(
 
 bridge_handle_fns!(ConnectionManager, clone = false);
 
+fn leak_hostname(hostname: String) -> &'static str {
+    Box::leak(hostname.into_boxed_str())
+}
+
+fn root_certificates_for_override(root_certificate_der: &[u8]) -> RootCertificates {
+    if root_certificate_der.is_empty() {
+        RootCertificates::Native
+    } else {
+        RootCertificates::FromDer(Cow::Owned(root_certificate_der.to_vec()))
+    }
+}
+
+fn apply_domain_override(
+    domain_config: &mut DomainConfig,
+    hostname: &'static str,
+    port: NonZeroU16,
+    cert: &RootCertificates,
+    http_version: HttpVersion,
+) {
+    domain_config.connect.hostname = hostname;
+    domain_config.connect.port = port;
+    domain_config.connect.cert = cert.clone();
+    domain_config.connect.min_tls_version = None;
+    domain_config.connect.http_version = Some(http_version);
+    domain_config.connect.proxy = None;
+    domain_config.ip_v4 = &[];
+    domain_config.ip_v6 = &[];
+}
+
 #[bridge_fn]
 fn ConnectionManager_new(
     environment: AsType<Environment, u8>,
@@ -101,6 +133,60 @@ fn ConnectionManager_new(
 ) -> ConnectionManager {
     ConnectionManager::new(
         environment.into_inner(),
+        user_agent.as_str(),
+        remote_config.take(),
+        build_variant.into_inner(),
+    )
+}
+
+#[bridge_fn]
+fn ConnectionManager_newCustomOverride(
+    environment: AsType<Environment, u8>,
+    user_agent: String,
+    remote_config: &mut BridgedStringMap,
+    build_variant: AsType<BuildVariant, u8>,
+    chat_hostname: String,
+    chat_port: AsType<NonZeroU16, u16>,
+    cdsi_hostname: String,
+    cdsi_port: u16,
+    root_certificate_der: &[u8],
+) -> ConnectionManager {
+    let mut env = environment.into_inner().env();
+    let cert = root_certificates_for_override(root_certificate_der);
+
+    let chat_hostname = leak_hostname(chat_hostname);
+    let chat_port = chat_port.into_inner();
+
+    apply_domain_override(
+        &mut env.chat_domain_config,
+        chat_hostname,
+        chat_port,
+        &cert,
+        HttpVersion::Http1_1,
+    );
+    apply_domain_override(
+        &mut env.experimental_chat_h2_domain_config,
+        chat_hostname,
+        chat_port,
+        &cert,
+        HttpVersion::Http2,
+    );
+
+    if !cdsi_hostname.is_empty() {
+        let cdsi_port = NonZeroU16::new(cdsi_port)
+            .unwrap_or_else(|| panic!("invalid CDSI override port {cdsi_port}"));
+        let cdsi_hostname = leak_hostname(cdsi_hostname);
+        apply_domain_override(
+            &mut env.cdsi.domain_config,
+            cdsi_hostname,
+            cdsi_port,
+            &cert,
+            HttpVersion::Http1_1,
+        );
+    }
+
+    ConnectionManager::new_from_static_environment(
+        env,
         user_agent.as_str(),
         remote_config.take(),
         build_variant.into_inner(),
